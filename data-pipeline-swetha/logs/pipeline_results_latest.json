@@ -1,0 +1,38 @@
+{
+  "pipeline_execution": {
+    "success": true,
+    "start_time": "2025-11-14T18:15:16.489085",
+    "end_time": "2025-11-14T18:16:11.910983",
+    "total_duration_seconds": 55.421898,
+    "total_duration_minutes": 0.9236983,
+    "steps_completed": [
+      "preprocessing",
+      "validation",
+      "feature_engineering",
+      "bias_detection",
+      "bias_mitigation"
+    ],
+    "steps_failed": [],
+    "step_durations": {
+      "preprocessing": 9.105317115783691,
+      "validation": 0.7489268779754639,
+      "feature_engineering": 42.53263306617737,
+      "bias_detection": 1.9742810726165771,
+      "bias_mitigation": 1.0588972568511963
+    }
+  },
+  "quality_metrics": {
+    "validation_score": 82.0,
+    "validation_passed": true,
+    "bias_score_before": 18.882363867583482,
+    "bias_score_after": 1.0877862152115072e-14,
+    "bias_improvement": 18.88236386758347,
+    "mitigation_applied": true
+  },
+  "overall_status": {
+    "pipeline_healthy": true,
+    "data_quality": "good",
+    "bias_status": "acceptable",
+    "ready_for_modeling": true
+  }
+}

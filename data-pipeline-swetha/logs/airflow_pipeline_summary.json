@@ -1,0 +1,33 @@
+{
+  "pipeline_metadata": {
+    "execution_time": "2025-11-15T01:36:14.423915",
+    "dag_run_id": "manual__2025-11-15T01:35:07.087756+00:00",
+    "status": "SUCCESS"
+  },
+  "data_metrics": {
+    "raw_data_size_mb": 95.02091217041016,
+    "records_processed": 7061,
+    "duplicates_removed": 2696,
+    "features_created": 90
+  },
+  "quality_assessment": {
+    "validation_score": 82.0,
+    "validation_status": "PASS",
+    "data_quality_level": "GOOD"
+  },
+  "bias_analysis": {
+    "raw_bias_score": 18.882363867583482,
+    "age_cv_adjusted": 60.51242831218674,
+    "interpretation": "POTENTIAL_BIAS",
+    "mitigation_applied": true,
+    "bias_score_after": 1.0877862152115072e-14,
+    "improvement_percentage": 99.99999999999994,
+    "final_bias_status": "ACCEPTABLE",
+    "requires_institutional_review": true
+  },
+  "recommendations": [
+    "CRITICAL: Severe bias detected. Institutional review required.",
+    "Mitigation effective (100.0% improvement). Use mitigated dataset for ML.",
+    "Pipeline successful. Data ready for ML model training."
+  ]
+}

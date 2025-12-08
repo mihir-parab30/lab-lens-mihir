@@ -1,0 +1,69 @@
+{
+  "timestamp": "2025-11-15T01:36:13.420529",
+  "mitigation_applied": true,
+  "strategy": {
+    "action": "severe",
+    "methods": [
+      "feature_normalization"
+    ],
+    "reasoning": "Severe unexplained bias detected for age_group (CV: 60.5%). Institutional review required. ",
+    "requires_review": true,
+    "demographic_targets": [
+      "age_group"
+    ]
+  },
+  "mitigation_details": {
+    "methods_applied": [
+      "feature_normalization"
+    ],
+    "changes_made": [
+      "Normalized features across age_group"
+    ],
+    "features_modified": [
+      "text_chars",
+      "text_tokens",
+      "word_count"
+    ]
+  },
+  "before_mitigation": {
+    "age_cv": 18.882363867583482,
+    "age_bias_alert": "True",
+    "overall_bias_score": 18.882363867583482,
+    "overall_bias_alert": true
+  },
+  "after_mitigation": {
+    "age_cv": 1.0877862152115072e-14,
+    "overall_bias_score": 1.0877862152115072e-14
+  },
+  "improvement": {
+    "overall_bias_score": {
+      "original": 18.882363867583482,
+      "new": 1.0877862152115072e-14,
+      "improvement_percentage": 99.99999999999994,
+      "absolute_reduction": 18.88236386758347
+    },
+    "age_cv": {
+      "original": 18.882363867583482,
+      "new": 1.0877862152115072e-14,
+      "improvement_percentage": 99.99999999999994,
+      "absolute_reduction": 18.88236386758347
+    }
+  },
+  "effectiveness_assessment": {
+    "overall_effectiveness": "effective",
+    "metrics_improved": [
+      "overall_bias_score",
+      "age_cv"
+    ],
+    "metrics_unchanged": [],
+    "metrics_worsened": [],
+    "verdict": "Mitigation was effective. Bias metrics improved across most dimensions without introducing new disparities."
+  },
+  "recommendations": [
+    "CRITICAL: Severe bias detected requiring institutional review. Convene stakeholder meeting to address systematic documentation practices.",
+    "Conduct detailed audit of documentation procedures by demographic group.",
+    "Mitigation was successful. Use mitigated dataset for ML model training.",
+    "Continue monitoring bias metrics with regular re-assessment."
+  ],
+  "mitigated_dataset_path": "/opt/airflow/data-pipeline/data/processed/mimic_features_mitigated.csv"
+}
