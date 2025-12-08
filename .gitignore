@@ -250,6 +250,33 @@ ENV/
 # Logs
 logs/*.json
 logs/bias_plots/*.png
+
+ Model files (too large for Git)
+*.safetensors
+*.bin
+*.h5
+model-development/saved_models/
+model-development/scripts/fine_tuned_bart_large_cnn/
+fine_tuned_bart_large_cnn/
+
+# Environment files (sensitive)
+.env.*
+secrets.yaml
+config.local.yaml
+
+# MLflow artifacts
+mlartifacts/
+
+# Jupyter
+*.ipynb
+
+# JSON files (except specific ones)
+*.json
+!version_info.json
+!adapter_config.json
+!tokenizer_config.json
+!.env.template
+!requirements.txtvenv311/
 credentials/
 .env
 credentials/oauth_client.json

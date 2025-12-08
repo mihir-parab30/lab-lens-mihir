@@ -1,12 +1,17 @@
 # prepare_and_push_hf.py
 from huggingface_hub import HfApi, create_repo
 import os
+from dotenv import load_dotenv
+
+load_dotenv()  # Load environment variables from .env file
 
 def push_to_huggingface():
     # Your HF credentials
-    HF_USERNAME = "your-username"  # Replace with your HF username
-    HF_TOKEN = "hf_..."  # Your HF token
-    
+    HF_USERNAME = os.environ.get("HF_USERNAME")
+    HF_TOKEN = os.environ.get("HF_TOKEN")
+    if not HF_TOKEN:
+        raise ValueError("Please set HF_TOKEN environment variable")
+        
     repo_id = f"{HF_USERNAME}/bart-medical-discharge-summarizer"
     
     api = HfApi()

@@ -10,6 +10,14 @@ def load_model():
     
     print("Loading base model (this may take a few minutes on first run)...")
     try:
+        # Check for MPS availability first
+        # import torch
+        # if torch.backends.mps.is_available():
+        #     print("✅ Mac GPU (MPS) detected")
+        #     device_map = "mps"
+        # else:
+        #     print("⚠️ No GPU detected, using CPU (will be slow)")
+        #     device_map = "cpu"
         # Try loading with less memory
         model = AutoModelForCausalLM.from_pretrained(
             base_model,
@@ -24,6 +32,8 @@ def load_model():
         
         print("Applying LoRA adapter...")
         model = PeftModel.from_pretrained(model, adapter_path)
+        tokenizer.pad_token = tokenizer.eos_token
+
         
         return model, tokenizer
     except Exception as e:
@@ -119,7 +129,15 @@ None
 """
     
     # FORMAT THE PROMPT EXACTLY LIKE TRAINING
-    instruction = "You are a medical assistant. Explain this hospital discharge summary to the patient in simple, everyday language. Avoid medical jargon."
+    instruction = """You are a medical assistant. 
+IMPORTANT RULES:
+1. NEVER list medications
+2. Use simple words a child would understand
+3. Keep response under 100 words
+4. Focus only on: what happened, current condition, what's next
+
+Example: 'You had bleeding in your brain. You're getting better but need help moving. You'll go to a special hospital to continue recovering.'
+"""
     
     prompt = f"""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
 
@@ -130,18 +148,35 @@ None
 """
     
     print("\nGenerating response...")
-    inputs = tokenizer(prompt, return_tensors="pt")
+    inputs = tokenizer(prompt, return_tensors="pt", padding=True, truncation=True)
     
     with torch.no_grad():
         outputs = model.generate(
             inputs.input_ids,
             max_new_tokens=500,
-            temperature=0.7,
+            temperature=0.3,
+            top_p =0.85,
+            repetition_penalty=1.5,
             do_sample=True,
             pad_token_id=tokenizer.eos_token_id
         )
     
     response = tokenizer.decode(outputs[0][len(inputs.input_ids[0]):], skip_special_tokens=True)
+
+    def clean_medical_output(text):
+        lines = text.split('\n')
+        cleaned = []
+        for line in lines:
+            # Skip medication lines
+            if any(word in line.lower() for word in ['mg', 'tablet', 'injection', 'solution']):
+                continue
+            # Skip medical jargon lines
+            if 'Sig:' in line or 'PO' in line or 'BID' in line:
+                continue
+            cleaned.append(line)
+        return '\n'.join(cleaned).strip()
+
+    response = clean_medical_output(response)
     print("\n" + "="*50)
     print("Generated Summary:")
     print("="*50)
