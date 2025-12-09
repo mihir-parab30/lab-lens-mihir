@@ -604,23 +604,27 @@ pip install sentence-transformers faiss-cpu
 
 ### Documentation
 
-- **Complete Guide**: See `RAG_TESTING_GUIDE.md`
-- **Single-Patient Guide**: See `RAG_SINGLE_PATIENT_GUIDE.md`
-- **Status Report**: See `RAG_STATUS_REPORT.md`
+- **RAG Guide**: See [docs/RAG_GUIDE.md](docs/RAG_GUIDE.md) for complete RAG system documentation
+- **API Setup**: See [docs/API_SETUP.md](docs/API_SETUP.md) for Gemini API configuration
+- **All Documentation**: See [docs/README.md](docs/README.md) for complete documentation index
 
 ## 📚 Documentation
 
-### API Documentation
-- **Preprocessing API**: Complete preprocessing function documentation
-- **Validation API**: Data validation and quality checking APIs
-- **Bias Detection API**: Bias analysis and mitigation APIs
-- **Pipeline API**: Main pipeline orchestration documentation
+All documentation is organized in the [`docs/`](docs/) directory. Key guides:
+
+### Getting Started
+- **[API Setup Guide](docs/API_SETUP.md)** - Setting up Gemini API keys
+- **[RAG Guide](docs/RAG_GUIDE.md)** - Patient Q&A system documentation
+- **[BigQuery Setup](docs/BIGQUERY_SETUP.md)** - Setting up BigQuery access
 
 ### User Guides
-- **Getting Started**: Quick start guide for new users
-- **Configuration Guide**: Detailed configuration options
-- **Troubleshooting**: Common issues and solutions
-- **Best Practices**: Recommended usage patterns
+- **[Model Testing Guide](docs/MODEL_TESTING_GUIDE.md)** - How to test models
+- **[Model Development Guide](docs/MODEL_DEVELOPMENT_GUIDE.md)** - Model development
+- **[File Q&A Guide](docs/FILE_QA_GUIDE.md)** - File-based Q&A system
+- **[Web Interface Guide](docs/WEB_INTERFACE_GUIDE.md)** - Web interface usage
+
+### Complete Documentation Index
+See [docs/README.md](docs/README.md) for the full documentation index.
 
 ## 🔮 Future Roadmap
 

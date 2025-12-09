@@ -16,6 +16,7 @@ The RAG (Retrieval-Augmented Generation) system enables patients to ask question
 - ✅ **Source Citations**: Shows which sections of the report were used
 - ✅ **Multi-Question Support**: Answer multiple questions at once
 - ✅ **Patient Filtering**: Filter questions to specific patient records
+- ✅ **Single-Patient Mode**: Load only one patient's data for faster, more secure Q&A
 
 ## Quick Start
 
@@ -31,9 +32,26 @@ pip install sentence-transformers faiss-cpu
 
 ### Basic Usage
 
-#### Interactive Mode (Recommended)
+#### Single-Patient Mode (Recommended)
 
-Start an interactive Q&A session:
+For patient-specific Q&A, use single-patient mode which loads only that patient's record:
+
+```bash
+# Interactive mode for one patient
+python scripts/patient_qa_single.py --hadm-id 130656
+
+# Single question
+python scripts/patient_qa_single.py --hadm-id 130656 --question "What are my diagnoses?"
+```
+
+**Benefits:**
+- Fast: Only processes one patient's record (5-10 seconds)
+- Efficient: Minimal memory usage (<100 MB)
+- Secure: Only loads that patient's data
+
+#### Interactive Mode (All Records)
+
+Start an interactive Q&A session with all records:
 
 ```bash
 python scripts/patient_qa_interactive.py
@@ -45,29 +63,21 @@ For a specific patient:
 python scripts/patient_qa_interactive.py --hadm-id 130656
 ```
 
-#### Single Question
+#### Quick Test
 
-Answer a single question:
-
-```bash
-python scripts/patient_qa_interactive.py --question "What are my diagnoses?"
-```
-
-For a specific patient:
+Test with a small dataset first:
 
 ```bash
-python scripts/patient_qa_interactive.py --hadm-id 130656 --question "What medications do I need to take?"
-```
+# Create test dataset (first 10 records)
+python -c "
+import pandas as pd
+df = pd.read_csv('data-pipeline/data/processed/processed_discharge_summaries.csv')
+df.head(10).to_csv('data-pipeline/data/processed/test_discharge_summaries.csv', index=False)
+print('Created test dataset with 10 records')
+"
 
-#### Multiple Questions
-
-Answer multiple questions at once:
-
-```bash
-python scripts/patient_qa_interactive.py --questions \
-  "What are my diagnoses?" \
-  "What medications do I need?" \
-  "When is my follow-up?"
+# Test with smaller dataset
+python scripts/quick_test_rag.py --hadm-id 130656 --question "What are my diagnoses?" --data-path data-pipeline/data/processed/test_discharge_summaries.csv
 ```
 
 ## Example Questions
@@ -130,19 +140,26 @@ Use the RAG system programmatically:
 ```python
 from src.rag.patient_qa import PatientQA
 
-# Initialize system
+# Single-patient mode (recommended)
+qa = PatientQA(
+    data_path="data-pipeline/data/processed/processed_discharge_summaries.csv",
+    hadm_id=130656  # Loads only this patient's data
+)
+
+# Ask questions (no hadm_id needed - already filtered)
+result = qa.ask_question("What are my diagnoses?")
+print(result['answer'])
+
+# All records mode
 qa = PatientQA(
     data_path="data-pipeline/data/processed/processed_discharge_summaries.csv"
 )
 
-# Ask a question
+# Ask with patient filter
 result = qa.ask_question(
     question="What are my diagnoses?",
     hadm_id=130656  # Optional: filter to specific patient
 )
-
-print(result['answer'])
-print(f"Sources: {len(result['sources'])}")
 ```
 
 ### Custom Configuration
@@ -168,14 +185,14 @@ rag = RAGSystem(
     embedding_model="all-MiniLM-L6-v2",
     chunk_size=500,
     chunk_overlap=50,
-    data_path="data-pipeline/data/processed/processed_discharge_summaries.csv"
+    data_path="data-pipeline/data/processed/processed_discharge_summaries.csv",
+    hadm_id=130656  # Single-patient mode
 )
 
 # Retrieve relevant chunks
 results = rag.retrieve(
     query="What medications are prescribed?",
     k=5,
-    hadm_id_filter=130656,  # Optional: filter by HADM ID
     min_score=0.3  # Minimum similarity threshold
 )
 
@@ -193,12 +210,6 @@ Available sentence transformer models:
 - `all-MiniLM-L6-v2` (default) - Fast, good quality, 384 dimensions
 - `all-mpnet-base-v2` - Better quality, slower, 768 dimensions
 - `all-MiniLM-L12-v2` - Balanced option
-
-Install additional models:
-```bash
-# Models are downloaded automatically on first use
-# No manual installation needed
-```
 
 ### Chunking Strategy
 
@@ -221,7 +232,6 @@ results = rag.retrieve(
     query="question",
     k=10,                # Number of chunks to retrieve
     min_score=0.4,       # Minimum similarity score (0-1)
-    hadm_id_filter=123   # Filter to specific patient
 )
 ```
 
@@ -230,7 +240,7 @@ results = rag.retrieve(
 Embeddings are automatically cached to speed up subsequent runs:
 
 - **Cache Location**: `models/rag_embeddings/embeddings_{filename}.pkl`
-- **First Run**: Creates embeddings (takes a few minutes)
+- **First Run**: Creates embeddings (takes a few minutes for full dataset)
 - **Subsequent Runs**: Loads from cache (seconds)
 
 To rebuild embeddings:
@@ -238,42 +248,18 @@ To rebuild embeddings:
 rag.load_data("data.csv", force_rebuild=True)
 ```
 
-## Output Format
-
-### Answer Dictionary
-
-```python
-{
-    'answer': 'Patient-friendly answer...',
-    'question': 'Original question',
-    'sources': [
-        {
-            'chunk': 'Relevant text excerpt...',
-            'score': 0.85,  # Similarity score (0-1)
-            'hadm_id': 130656,
-            'metadata': {...}
-        },
-        ...
-    ],
-    'num_sources': 5,
-    'hadm_id': 130656,
-    'timestamp': '2024-01-01T12:00:00'
-}
-```
-
 ## Performance
 
-### Speed
+### Single-Patient Mode
+- **First run**: 5-10 seconds (create embeddings for one patient)
+- **Subsequent runs**: 1-2 seconds (load cached embeddings)
+- **Memory**: <100 MB
 
+### All Records Mode
 - **Embedding Generation** (first run): ~2-5 minutes for 300K records
 - **Embedding Loading** (cached): ~5-10 seconds
 - **Question Answering**: ~2-5 seconds per question
-
-### Accuracy
-
-- Semantic search finds relevant sections even with different wording
-- Gemini generates contextually accurate answers
-- Source citations help verify accuracy
+- **Memory**: 2-4 GB
 
 ## Troubleshooting
 
@@ -297,17 +283,14 @@ pip install faiss-cpu
 
 **Note**: System works without FAISS, but search will be slower.
 
-### Embedding Model Download
-
-Models are downloaded automatically on first use. First initialization may take 1-2 minutes.
-
 ### Memory Issues
 
 For very large datasets:
 
-1. Use smaller chunk sizes
-2. Use CPU-only FAISS: `pip install faiss-cpu` (instead of `faiss-gpu`)
-3. Process in batches
+1. Use single-patient mode (recommended)
+2. Use smaller chunk sizes
+3. Use CPU-only FAISS: `pip install faiss-cpu` (instead of `faiss-gpu`)
+4. Process in batches
 
 ### Gemini API Errors
 
@@ -320,14 +303,22 @@ export GOOGLE_API_KEY="your-api-key"
 python scripts/setup_gemini_api_key.py
 ```
 
+See [API Setup Guide](API_SETUP.md) for more details.
+
+### First Run is Slow
+
+- First run creates embeddings (2-5 minutes for large datasets)
+- Subsequent runs load cached embeddings (5-10 seconds)
+- Use single-patient mode for faster testing
+
 ## Best Practices
 
-### 1. Patient-Specific Questions
+### 1. Use Single-Patient Mode
 
-Always use `--hadm-id` when asking about a specific patient:
+For patient-specific Q&A, always use single-patient mode:
 
 ```bash
-python scripts/patient_qa_interactive.py --hadm-id 130656
+python scripts/patient_qa_single.py --hadm-id 130656
 ```
 
 ### 2. Clear Questions
@@ -341,7 +332,7 @@ Encourage patients to ask clear, specific questions:
 Use interactive mode for natural conversation:
 
 ```bash
-python scripts/patient_qa_interactive.py --hadm-id 130656
+python scripts/patient_qa_single.py --hadm-id 130656
 ```
 
 ### 4. Verify Sources
@@ -365,7 +356,11 @@ def ask_question():
     question = data.get('question')
     hadm_id = data.get('hadm_id')
     
-    result = qa_system.ask_question(question, hadm_id=hadm_id)
+    # Use single-patient mode if hadm_id provided
+    if hadm_id:
+        qa_system = PatientQA(hadm_id=hadm_id)
+    
+    result = qa_system.ask_question(question)
     return jsonify(result)
 
 if __name__ == '__main__':
@@ -377,7 +372,7 @@ if __name__ == '__main__':
 ```python
 from src.rag.patient_qa import PatientQA
 
-qa = PatientQA()
+qa = PatientQA(hadm_id=130656)  # Single-patient mode
 
 questions = [
     "What are my diagnoses?",
@@ -385,37 +380,15 @@ questions = [
     "When is my follow-up?"
 ]
 
-results = qa.ask_multiple_questions(questions, hadm_id=130656)
+results = qa.ask_multiple_questions(questions)
 
 for question, result in zip(questions, results):
     print(f"Q: {question}")
     print(f"A: {result['answer']}\n")
 ```
 
-## Future Enhancements
-
-Planned improvements:
-
-- [ ] Support for follow-up questions (conversation context)
-- [ ] Multi-language support
-- [ ] Audio input/output
-- [ ] Integration with patient portals
-- [ ] Feedback mechanism for answer quality
-- [ ] Visualization of retrieved sections
-- [ ] Support for image-based questions
-
 ## Related Documentation
 
-- [MODEL_TESTING_GUIDE.md](MODEL_TESTING_GUIDE.md) - Model testing
-- [docs/MODEL_DEVELOPMENT_GUIDE.md](docs/MODEL_DEVELOPMENT_GUIDE.md) - Model development
-
-## Support
-
-For issues or questions:
-1. Check troubleshooting section above
-2. Review error messages carefully
-3. Verify data file path and format
-4. Check API keys are set correctly
-
-
-
+- [API Setup Guide](API_SETUP.md) - Setting up Gemini API
+- [Model Development Guide](MODEL_DEVELOPMENT_GUIDE.md) - Model development
+- [Testing Guide](MODEL_TESTING_GUIDE.md) - Testing procedures
