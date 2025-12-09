@@ -46,10 +46,8 @@ If Google AI Studio isn't accessible, you can use Vertex AI:
 ### Solution 7: Alternative - Use Existing Key
 If you have an existing API key that might still work, you can try to restore it:
 1. Check if you have it saved anywhere (password manager, notes, etc.)
-2. Try the key we found earlier (may not work if invalidated):
-   ```
-   AIzaSyCw26SUG-9kKfzLDd5LR9PMiThQIK2ud2Y
-   ```
+2. If you find an old key, test it using the test script below
+3. **Important**: Never commit API keys to version control - always use environment variables or `.env` files (which are in `.gitignore`)
 
 ## Quick Test
 
