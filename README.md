@@ -199,52 +199,84 @@ python scripts/test_complete_model.py --hadm-id 149188
 
 ## 🗂️ Project Structure
 
+This repository follows standard MLOps best practices with clear separation of concerns:
+
 ```
 lab-lens/
-├── 📁 docs/                    # Documentation and project materials
-│   └── LabLens_ AI-Powered Health Report Simplification .pdf
-├── 📁 data-pipeline/           # Main data processing pipeline
-│   ├── 📁 configs/            # Configuration files
-│   │   └── pipeline_config.json
-│   ├── 📁 data/               # Data storage
-│   │   ├── 📁 raw/            # Raw data from BigQuery
-│   │   └── 📁 processed/      # Processed data
-│   ├── 📁 logs/               # Logs and reports
-│   │   ├── 📁 bias_plots/     # Bias visualization outputs
-│   │   ├── validation_report.json
-│   │   └── bias_report.json
-│   ├── 📁 notebooks/          # Jupyter notebooks for exploration
-│   │   └── data_acquisition.ipynb
-│   ├── 📁 scripts/            # Processing scripts
-│   │   ├── main_pipeline.py   # Main orchestration script
-│   │   ├── preprocessing.py   # Data preprocessing
-│   │   ├── validation.py      # Data validation
-│   │   ├── bias_detection.py  # Bias analysis
-│   │   └── automated_bias_handler.py  # Automated mitigation
-│   ├── requirements.txt       # Python dependencies
-│   └── README.md             # Pipeline documentation
-├── 📁 src/                   # Source code modules
-│   ├── 📁 utils/             # Utility modules
-│   │   ├── logging_config.py # Centralized logging
-│   │   └── error_handling.py # Error management
-│   ├── 📁 data/              # Data processing modules
-│   ├── 📁 rag/               # RAG (Retrieval-Augmented Generation) system
-│   │   ├── rag_system.py     # Core RAG implementation
-│   │   └── patient_qa.py     # Patient Q&A interface
-│   ├── 📁 training/          # Model training modules
-│   └── 📁 utils/             # General utilities
-├── 📁 configs/               # Global configuration files
-├── 📁 notebooks/             # Global notebooks
-├── 📁 scripts/               # Global scripts
-│   ├── patient_qa_single.py  # Single-patient RAG Q&A
-│   ├── patient_qa_interactive.py  # Interactive RAG Q&A
-│   └── test_rag_with_record.py    # RAG testing script
-├── 📁 models/                # Model storage
-│   └── 📁 rag_embeddings/    # Cached RAG embeddings
-├── 📁 tests/                 # Unit tests
-├── LICENSE                   # Project license
-└── README.md                 # This file
+├── 📁 data/                          # Data storage (gitignored)
+│   ├── raw/                          # Raw data from sources
+│   ├── processed/                     # Processed/cleaned data
+│   └── external/                      # External datasets
+│
+├── 📁 data_preprocessing/            # Data preprocessing pipeline
+│   ├── configs/                       # Preprocessing configurations
+│   ├── scripts/                       # Preprocessing scripts
+│   │   ├── data_acquisition.py        # Data acquisition from BigQuery
+│   │   ├── preprocessing.py           # Data cleaning
+│   │   ├── validation.py              # Data validation
+│   │   ├── feature_engineering.py     # Feature engineering
+│   │   ├── bias_detection.py          # Bias detection
+│   │   └── main_pipeline.py           # Main orchestration
+│   ├── notebooks/                     # Exploration notebooks
+│   └── tests/                         # Preprocessing tests
+│
+├── 📁 model_development/             # Model training and development
+│   ├── configs/                       # Training configurations
+│   ├── scripts/                       # Training scripts
+│   │   ├── train_gemini.py            # Model training
+│   │   ├── hyperparameter_tuning.py  # Hyperparameter optimization
+│   │   └── model_validation.py       # Model validation
+│   ├── notebooks/                     # Training notebooks
+│   └── experiments/                   # Experiment results
+│
+├── 📁 model_deployment/              # Model deployment
+│   ├── api/                           # FastAPI application
+│   │   ├── app.py                     # API endpoints
+│   │   └── summarizer.py              # Summarization model
+│   ├── web/                           # Web interface (Streamlit)
+│   │   └── file_qa_web.py            # Streamlit web app
+│   └── scripts/                       # Deployment scripts
+│
+├── 📁 monitoring/                     # Monitoring and observability
+│   ├── metrics.py                      # Metrics collection
+│   └── logging/                        # Logging configurations
+│
+├── 📁 infrastructure/                 # Infrastructure as code
+│   ├── docker/                         # Docker configurations
+│   │   ├── Dockerfile
+│   │   ├── Dockerfile.cloudrun
+│   │   └── cloudbuild.yaml
+│   └── ci_cd/                         # CI/CD workflows
+│       └── .github/workflows/
+│
+├── 📁 src/                            # Source code library
+│   ├── rag/                           # RAG system
+│   │   ├── rag_system.py              # Core RAG implementation
+│   │   ├── file_qa.py                 # File Q&A system
+│   │   ├── patient_qa.py              # Patient Q&A interface
+│   │   └── document_processor.py      # Document processing
+│   └── utils/                         # Shared utilities
+│       ├── logging_config.py          # Logging configuration
+│       ├── error_handling.py          # Error handling
+│       └── medical_utils.py           # Medical utilities
+│
+├── 📁 notebooks/                      # Jupyter notebooks
+│   ├── exploration/                   # Data exploration
+│   └── experiments/                   # Experiment notebooks
+│
+├── 📁 tests/                          # Test suite
+│   ├── unit/                          # Unit tests
+│   ├── integration/                   # Integration tests
+│   └── e2e/                           # End-to-end tests
+│
+├── 📁 docs/                           # Documentation
+│   ├── deployment/                    # Deployment guides
+│   └── api/                           # API documentation
+│
+└── 📁 scripts/                        # Utility scripts
 ```
+
+**For detailed structure information, see [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md)**
 
 ## 🚀 Quick Start
 
