@@ -22,6 +22,14 @@ from src.utils.error_handling import ErrorHandler, safe_execute
 
 logger = get_logger(__name__)
 
+# Try to import medical utilities
+try:
+    from src.utils.medical_utils import get_medical_embedder
+    MEDICAL_UTILS_AVAILABLE = True
+except ImportError:
+    MEDICAL_UTILS_AVAILABLE = False
+    logger.debug("Medical utilities not available")
+
 try:
     from sentence_transformers import SentenceTransformer
     SENTENCE_TRANSFORMERS_AVAILABLE = True
@@ -51,6 +59,7 @@ class RAGSystem:
     def __init__(
         self,
         embedding_model: str = "all-MiniLM-L6-v2",
+        use_biobert: bool = False,
         chunk_size: int = 500,
         chunk_overlap: int = 50,
         data_path: Optional[str] = None,
@@ -62,6 +71,7 @@ class RAGSystem:
         
         Args:
             embedding_model: Name of sentence transformer model for embeddings
+            use_biobert: If True, use BioBERT for medical text (overrides embedding_model)
             chunk_size: Size of text chunks for embedding
             chunk_overlap: Overlap between chunks
             data_path: Path to processed discharge summaries CSV
@@ -73,11 +83,29 @@ class RAGSystem:
         self.embeddings_cache_dir = Path(embeddings_cache_dir)
         self.embeddings_cache_dir.mkdir(parents=True, exist_ok=True)
         self.hadm_id = hadm_id
+        self.use_biobert = use_biobert
         
         self.error_handler = ErrorHandler(logger)
         
         # Initialize embedding model
-        if SENTENCE_TRANSFORMERS_AVAILABLE:
+        if use_biobert and MEDICAL_UTILS_AVAILABLE:
+            # Use BioBERT for medical text
+            try:
+                medical_embedder = get_medical_embedder()
+                if medical_embedder and medical_embedder.embedder:
+                    logger.info("Using BioBERT embedder for medical text")
+                    self.embedding_model = medical_embedder.embedder
+                    self.embedding_dim = medical_embedder.get_embedding_dimension()
+                    logger.info(f"BioBERT embedder loaded. Dimension: {self.embedding_dim}")
+                else:
+                    logger.warning("BioBERT not available, falling back to default model")
+                    use_biobert = False
+            except Exception as e:
+                logger.warning(f"Failed to load BioBERT: {e}. Falling back to default model.")
+                use_biobert = False
+        
+        if not use_biobert and SENTENCE_TRANSFORMERS_AVAILABLE:
+            # Use standard embedding model
             try:
                 logger.info(f"Loading embedding model: {embedding_model}")
                 self.embedding_model = SentenceTransformer(embedding_model)
@@ -87,7 +115,7 @@ class RAGSystem:
                 logger.error(f"Failed to load embedding model: {e}")
                 self.embedding_model = None
                 self.embedding_dim = None
-        else:
+        elif not use_biobert:
             self.embedding_model = None
             self.embedding_dim = None
             logger.warning("Embedding model not available")

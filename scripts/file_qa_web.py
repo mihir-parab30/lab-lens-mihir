@@ -368,13 +368,21 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-def initialize_qa_system(user_id: Optional[str] = None):
-    """Initialize the File QA system with optional user-specific vector database"""
-    api_key = os.getenv('GOOGLE_API_KEY')
+def initialize_qa_system(user_id: Optional[str] = None, use_biobert: bool = True):
+    """
+    Initialize the File QA system with optional user-specific vector database
+    
+    Args:
+        user_id: Optional user ID for collection isolation
+        use_biobert: If True, use BioBERT for better medical document retrieval
+    """
+    api_key = os.getenv('GOOGLE_API_KEY') or os.getenv('GEMINI_API_KEY')
     return FileQA(
         gemini_api_key=api_key,
+        use_biobert=use_biobert,  # Use BioBERT for medical text embeddings
         use_vector_db=True,  # Enable ChromaDB for persistent storage
-        user_id=user_id  # Use user_id for collection isolation
+        user_id=user_id,  # Use user_id for collection isolation
+        simplify_medical_terms=True  # Enable medical term simplification
     )
 
 
@@ -643,13 +651,36 @@ def main():
             # Add user message to chat
             st.session_state.messages.append({"role": "user", "content": prompt})
             
+            # Check if user wants a summary (use MedicalSummarizer)
+            prompt_lower = prompt.lower().strip()
+            is_summary_request = any(keyword in prompt_lower for keyword in [
+                'summarize', 'summary', 'summarise', 'summarise this', 
+                'give me a summary', 'create a summary', 'generate summary'
+            ])
+            
             # Generate response
-            with st.spinner("Thinking..."):
+            with st.spinner("Generating summary using MedicalSummarizer..." if is_summary_request else "Thinking..."):
                 try:
-                    result = st.session_state.qa_system.ask_question(prompt)
-                    
-                    answer = result.get('answer', 'No answer available')
-                    sources = result.get('sources', [])
+                    if is_summary_request:
+                        # Use MedicalSummarizer for summarization
+                        result = st.session_state.qa_system.summarize_document()
+                        
+                        if result.get('success'):
+                            answer = result.get('summary', 'Summary not available')
+                            sources = []  # Summarizer doesn't return sources in the same format
+                        else:
+                            # Fallback to Gemini if summarizer fails
+                            error_msg = result.get('error', 'Unknown error')
+                            logger.warning(f"Summarizer failed: {error_msg}. Falling back to Gemini.")
+                            result = st.session_state.qa_system.ask_question(prompt)
+                            answer = result.get('answer', 'No answer available')
+                            sources = result.get('sources', [])
+                    else:
+                        # Use Gemini for Q&A
+                        result = st.session_state.qa_system.ask_question(prompt)
+                        
+                        answer = result.get('answer', 'No answer available')
+                        sources = result.get('sources', [])
                     
                     # Add assistant response to chat
                     st.session_state.messages.append({

@@ -22,6 +22,36 @@ from src.utils.error_handling import ErrorHandler, safe_execute
 
 logger = get_logger(__name__)
 
+# Try to import medical utilities
+try:
+    from src.utils.medical_utils import get_medical_simplifier
+    MEDICAL_UTILS_AVAILABLE = True
+except ImportError:
+    MEDICAL_UTILS_AVAILABLE = False
+    logger.debug("Medical utilities not available")
+
+# Try to import MedicalSummarizer for document summarization
+try:
+    import sys
+    from pathlib import Path
+    # Add project root to path to import summarizer
+    project_root = Path(__file__).parent.parent.parent
+    model_deployment_path = project_root / "model-deployment"
+    
+    if model_deployment_path.exists():
+        # Add to path for import
+        if str(project_root) not in sys.path:
+            sys.path.insert(0, str(project_root))
+        from model_deployment.deployment_pipeline.summarizer import MedicalSummarizer
+        SUMMARIZER_AVAILABLE = True
+        logger.debug("MedicalSummarizer available")
+    else:
+        SUMMARIZER_AVAILABLE = False
+        logger.debug(f"MedicalSummarizer path not found: {model_deployment_path}")
+except ImportError as e:
+    SUMMARIZER_AVAILABLE = False
+    logger.debug(f"MedicalSummarizer not available: {e}")
+
 try:
     import google.generativeai as genai
     GEMINI_AVAILABLE = True
@@ -39,39 +69,55 @@ class FileQA:
     def __init__(
         self,
         embedding_model: str = "all-MiniLM-L6-v2",
+        use_biobert: bool = False,
         gemini_model: str = "gemini-2.0-flash-exp",
         gemini_api_key: Optional[str] = None,
         rag_k: int = 5,
         use_vector_db: bool = True,
         user_id: Optional[str] = None,
-        collection_name: str = "file_qa_documents"
+        collection_name: str = "file_qa_documents",
+        simplify_medical_terms: bool = True
     ):
         """
         Initialize File Q&A system
         
         Args:
             embedding_model: Sentence transformer model for embeddings
+            use_biobert: If True, use BioBERT for medical text (better for medical documents)
             gemini_model: Gemini model for answer generation
             gemini_api_key: Optional API key for Gemini (for image analysis)
             rag_k: Number of chunks to retrieve for context
             use_vector_db: Whether to use ChromaDB for persistent storage (default: True)
             user_id: Optional user ID for user-specific collections
             collection_name: Name of the ChromaDB collection
+            simplify_medical_terms: If True, simplify medical terms in answers
         """
         self.error_handler = ErrorHandler(logger)
         self.rag_k = rag_k
         self.use_vector_db = use_vector_db and CHROMADB_AVAILABLE
         self.user_id = user_id
+        self.simplify_medical_terms = simplify_medical_terms and MEDICAL_UTILS_AVAILABLE
         
         logger.info("Initializing File Q&A system...")
+        
+        # Initialize medical term simplifier if enabled
+        self.term_simplifier = None
+        if self.simplify_medical_terms:
+            try:
+                self.term_simplifier = get_medical_simplifier()
+                logger.info("Medical term simplifier enabled")
+            except Exception as e:
+                logger.warning(f"Failed to initialize medical term simplifier: {e}")
+                self.simplify_medical_terms = False
         
         # Initialize document processor
         self.doc_processor = DocumentProcessor(gemini_api_key=gemini_api_key)
         
         # Initialize RAG system (without loading data)
-        logger.info("Initializing RAG system...")
+        logger.info(f"Initializing RAG system (use_biobert={use_biobert})...")
         self.rag = RAGSystem(
-            embedding_model=embedding_model
+            embedding_model=embedding_model,
+            use_biobert=use_biobert
         )
         
         # Initialize vector database if enabled
@@ -105,6 +151,12 @@ class FileQA:
         except Exception as e:
             logger.error(f"Failed to initialize Gemini: {e}")
             self.gemini = None
+        
+        # Initialize MedicalSummarizer for document summarization (lazy loading)
+        self.summarizer = None
+        self.summarizer_available = SUMMARIZER_AVAILABLE
+        if self.summarizer_available:
+            logger.info("MedicalSummarizer will be loaded on first use")
     
     def load_file(self, file_path: str) -> Dict[str, any]:
         """
@@ -415,6 +467,16 @@ ANSWER:"""
             
             logger.info("Answer generated successfully")
             
+            # Apply medical term simplification if enabled
+            if self.simplify_medical_terms and self.term_simplifier and answer:
+                try:
+                    original_answer = answer
+                    answer = self.term_simplifier.simplify_text(answer, aggressive=False)
+                    logger.debug("Applied medical term simplification to answer")
+                except Exception as e:
+                    logger.warning(f"Failed to simplify medical terms: {e}")
+                    # Continue with original answer
+            
             # Determine answer source
             if has_good_matches:
                 answer_source = "document"
@@ -438,5 +500,77 @@ ANSWER:"""
                 'error': str(e),
                 'sources': retrieved_chunks,
                 'question': question
+            }
+    
+    def _get_summarizer(self):
+        """Lazy load MedicalSummarizer"""
+        if not self.summarizer_available:
+            return None
+        
+        if self.summarizer is None:
+            try:
+                logger.info("Loading MedicalSummarizer for document summarization...")
+                self.summarizer = MedicalSummarizer(use_gpu=False)  # Use CPU for web app compatibility
+                logger.info("MedicalSummarizer loaded successfully")
+            except Exception as e:
+                logger.error(f"Failed to load MedicalSummarizer: {e}")
+                self.summarizer_available = False
+                return None
+        
+        return self.summarizer
+    
+    def summarize_document(self, text: Optional[str] = None) -> Dict:
+        """
+        Generate a summary of the loaded document(s) using MedicalSummarizer
+        
+        Args:
+            text: Optional text to summarize. If None, uses all loaded document chunks.
+            
+        Returns:
+            Dictionary with summary and metadata
+        """
+        summarizer = self._get_summarizer()
+        if not summarizer:
+            return {
+                'success': False,
+                'error': 'MedicalSummarizer not available',
+                'summary': None
+            }
+        
+        # Get text to summarize
+        if text is None:
+            if not self.rag.chunks:
+                return {
+                    'success': False,
+                    'error': 'No documents loaded to summarize',
+                    'summary': None
+                }
+            # Combine all chunks
+            text = "\n\n".join(self.rag.chunks)
+        
+        if not text or not text.strip():
+            return {
+                'success': False,
+                'error': 'No text content to summarize',
+                'summary': None
+            }
+        
+        try:
+            logger.info("Generating document summary using MedicalSummarizer...")
+            result = summarizer.generate_summary(text)
+            
+            return {
+                'success': True,
+                'summary': result.get('final_summary', ''),
+                'raw_summary': result.get('raw_bart_summary', ''),
+                'extracted_data': result.get('extracted_data', {}),
+                'error': None
+            }
+        except Exception as e:
+            logger.error(f"Error generating summary: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'summary': None
             }
 
