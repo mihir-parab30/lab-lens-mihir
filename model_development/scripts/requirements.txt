@@ -1,8 +1,0 @@
-
-# Model Development Requirements
-mlflow>=2.0.0
-rouge-score
-matplotlib
-seaborn
-google-cloud-storage
-google-cloud-artifactregistry
