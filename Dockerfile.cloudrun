@@ -1,0 +1,60 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Install additional dependencies for PDF processing
+RUN pip install --no-cache-dir pdfplumber
+
+# Copy application code
+COPY . .
+
+# Create necessary directories with proper permissions
+RUN mkdir -p models/vector_db logs /root/.cache/huggingface && \
+    chmod -R 777 models logs /root/.cache/huggingface
+
+# Pre-download embedding models to avoid cold start issues
+RUN python3 -c "from sentence_transformers import SentenceTransformer; \
+    print('Downloading all-MiniLM-L6-v2...'); \
+    SentenceTransformer('all-MiniLM-L6-v2'); \
+    print('Model cached successfully')"
+
+# Pre-download BioBERT model if needed
+RUN python3 -c "from sentence_transformers import SentenceTransformer; \
+    print('Downloading dmis-lab/biobert-base-cased-v1.2...'); \
+    SentenceTransformer('dmis-lab/biobert-base-cased-v1.2'); \
+    print('BioBERT model cached successfully')" || echo "BioBERT download failed, will use default model"
+
+# Set environment variables
+ENV PYTHONPATH=/app
+ENV STREAMLIT_SERVER_HEADLESS=true
+ENV STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+ENV HF_HOME=/root/.cache/huggingface
+ENV TRANSFORMERS_CACHE=/root/.cache/huggingface
+
+# Cloud Run sets PORT environment variable, expose it
+ENV PORT=8501
+EXPOSE $PORT
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD curl --fail http://localhost:$PORT/_stcore/health || exit 1
+
+# Run Streamlit - Cloud Run will provide PORT env var
+CMD streamlit run scripts/file_qa_web.py \
+    --server.port=$PORT \
+    --server.address=0.0.0.0 \
+    --server.headless=true

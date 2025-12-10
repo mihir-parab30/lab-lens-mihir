@@ -169,18 +169,56 @@ class RAGSystem:
         
         logger.info(f"Created {len(self.chunks)} chunks from {len(documents)} documents")
         
+        # Validate that we have chunks
+        if not self.chunks:
+            error_msg = "No chunks created from documents. All documents may be empty."
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
         # Generate embeddings
         if not self.embedding_model:
-            logger.error("Cannot create embeddings: embedding model not available")
-            return
+            error_msg = "Cannot create embeddings: embedding model not available"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
         
-        logger.info(f"Generating embeddings for {len(self.chunks)} chunks...")
-        embeddings = self._generate_embeddings()
-        
-        # Build index
-        self._build_index(embeddings)
-        
-        logger.info(f"Successfully loaded {len(documents)} custom documents with {len(self.chunks)} chunks")
+        try:
+            logger.info(f"Generating embeddings for {len(self.chunks)} chunks...")
+            embeddings = self._generate_embeddings()
+            
+            if embeddings is None or len(embeddings) == 0:
+                error_msg = "Failed to generate embeddings: empty embeddings array"
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+            
+            logger.info(f"Generated embeddings with shape: {embeddings.shape}")
+            
+            # Build index
+            self._build_index(embeddings)
+            
+            # Validate that index was built successfully
+            if FAISS_AVAILABLE:
+                if self.index is None:
+                    error_msg = "Failed to build FAISS index"
+                    logger.error(error_msg)
+                    raise ValueError(error_msg)
+                logger.info(f"FAISS index built successfully with {self.index.ntotal} vectors")
+            else:
+                if not hasattr(self, 'embeddings_normalized') or len(self.embeddings_normalized) == 0:
+                    error_msg = "Failed to build numpy-based index: embeddings_normalized not set"
+                    logger.error(error_msg)
+                    raise ValueError(error_msg)
+                logger.info(f"Numpy-based index built successfully with {len(self.embeddings_normalized)} vectors")
+            
+            logger.info(f"Successfully loaded {len(documents)} custom documents with {len(self.chunks)} chunks")
+        except Exception as e:
+            logger.error(f"Error during document loading: {e}", exc_info=True)
+            # Reset state on error
+            self.chunks = []
+            self.metadata = []
+            self.index = None
+            if hasattr(self, 'embeddings_normalized'):
+                delattr(self, 'embeddings_normalized')
+            raise
     
     @safe_execute("load_data", logger, ErrorHandler(logger))
     def load_data(self, data_path: str, force_rebuild: bool = False, hadm_id: Optional[int] = None):
@@ -354,23 +392,34 @@ class RAGSystem:
     
     def _build_index(self, embeddings: np.ndarray):
         """Build vector index for similarity search"""
+        if embeddings is None or len(embeddings) == 0:
+            raise ValueError("Cannot build index: embeddings are empty")
+        
         if FAISS_AVAILABLE:
             # Use FAISS for efficient similarity search
-            dimension = embeddings.shape[1]
-            self.index = faiss.IndexFlatIP(dimension)  # Inner product for cosine similarity
-            
-            # Normalize embeddings for cosine similarity
-            faiss.normalize_L2(embeddings)
-            self.index.add(embeddings.astype('float32'))
-            
-            logger.info(f"Built FAISS index with {self.index.ntotal} vectors")
+            try:
+                dimension = embeddings.shape[1]
+                self.index = faiss.IndexFlatIP(dimension)  # Inner product for cosine similarity
+                
+                # Normalize embeddings for cosine similarity
+                faiss.normalize_L2(embeddings)
+                self.index.add(embeddings.astype('float32'))
+                
+                logger.info(f"Built FAISS index with {self.index.ntotal} vectors (dimension: {dimension})")
+            except Exception as e:
+                logger.error(f"Failed to build FAISS index: {e}", exc_info=True)
+                raise ValueError(f"Failed to build FAISS index: {e}")
         else:
             # Use numpy for similarity search (slower but works)
-            # Normalize embeddings for cosine similarity
-            norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
-            norms[norms == 0] = 1  # Avoid division by zero
-            self.embeddings_normalized = embeddings / norms
-            logger.info(f"Using numpy-based similarity search with {len(embeddings)} vectors")
+            try:
+                # Normalize embeddings for cosine similarity
+                norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+                norms[norms == 0] = 1  # Avoid division by zero
+                self.embeddings_normalized = embeddings / norms
+                logger.info(f"Using numpy-based similarity search with {len(embeddings)} vectors (dimension: {embeddings.shape[1]})")
+            except Exception as e:
+                logger.error(f"Failed to build numpy-based index: {e}", exc_info=True)
+                raise ValueError(f"Failed to build numpy-based index: {e}")
     
     def retrieve(
         self,
@@ -391,8 +440,25 @@ class RAGSystem:
         Returns:
             List of relevant chunks with metadata and scores
         """
-        if not self.embedding_model or (self.index is None and not hasattr(self, 'embeddings_normalized')):
-            raise ValueError("RAG system not initialized. Load data first.")
+        # Enhanced validation with detailed error messages
+        if not self.embedding_model:
+            error_details = "Embedding model is not initialized."
+            logger.error(f"RAG system not initialized: {error_details}")
+            raise ValueError(f"RAG system not initialized. {error_details} Load data first.")
+        
+        if not self.chunks:
+            error_details = "No document chunks available."
+            logger.error(f"RAG system not initialized: {error_details}")
+            raise ValueError(f"RAG system not initialized. {error_details} Load data first.")
+        
+        # Check index status
+        has_faiss_index = FAISS_AVAILABLE and self.index is not None
+        has_numpy_index = hasattr(self, 'embeddings_normalized') and len(self.embeddings_normalized) > 0
+        
+        if not has_faiss_index and not has_numpy_index:
+            error_details = f"Index not built. FAISS available: {FAISS_AVAILABLE}, FAISS index exists: {self.index is not None if FAISS_AVAILABLE else 'N/A'}, Numpy index exists: {has_numpy_index}, Chunks: {len(self.chunks)}"
+            logger.error(f"RAG system not initialized: {error_details}")
+            raise ValueError(f"RAG system not initialized. {error_details} Load data first.")
         
         # Generate query embedding
         query_embedding = self.embedding_model.encode([query], convert_to_numpy=True)[0]

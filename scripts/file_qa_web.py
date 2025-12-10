@@ -371,19 +371,40 @@ st.markdown("""
 def initialize_qa_system(user_id: Optional[str] = None, use_biobert: bool = True):
     """
     Initialize the File QA system with optional user-specific vector database
-    
+
     Args:
         user_id: Optional user ID for collection isolation
         use_biobert: If True, use BioBERT for better medical document retrieval
     """
-    api_key = os.getenv('GOOGLE_API_KEY') or os.getenv('GEMINI_API_KEY')
-    return FileQA(
-        gemini_api_key=api_key,
-        use_biobert=use_biobert,  # Use BioBERT for medical text embeddings
-        use_vector_db=True,  # Enable ChromaDB for persistent storage
-        user_id=user_id,  # Use user_id for collection isolation
-        simplify_medical_terms=True  # Enable medical term simplification
-    )
+    try:
+        api_key = os.getenv('GOOGLE_API_KEY') or os.getenv('GEMINI_API_KEY')
+        if not api_key:
+            logger.error("No API key found. Set GOOGLE_API_KEY or GEMINI_API_KEY environment variable.")
+            st.error("⚠️ API key not configured. Please contact administrator.")
+            return None
+
+        logger.info(f"Initializing QA system (use_biobert={use_biobert}, user_id={user_id})...")
+        qa_system = FileQA(
+            gemini_api_key=api_key,
+            use_biobert=use_biobert,  # Use BioBERT for medical text embeddings
+            use_vector_db=True,  # Enable ChromaDB for persistent storage
+            user_id=user_id,  # Use user_id for collection isolation
+            simplify_medical_terms=True  # Enable medical term simplification
+        )
+        logger.info("QA system initialized successfully")
+        return qa_system
+    except Exception as e:
+        logger.error(f"Failed to initialize QA system: {e}", exc_info=True)
+        st.error(f"⚠️ System initialization failed: {str(e)}")
+        # Try falling back to non-BioBERT model
+        if use_biobert:
+            logger.warning("Falling back to standard embedding model...")
+            try:
+                return initialize_qa_system(user_id=user_id, use_biobert=False)
+            except Exception as fallback_error:
+                logger.error(f"Fallback initialization also failed: {fallback_error}")
+                return None
+        return None
 
 
 def save_uploaded_file(uploaded_file) -> str:
@@ -407,6 +428,11 @@ def main():
         # Use current_chat_id as user_id for collection isolation
         user_id = st.session_state.get('current_chat_id', None)
         st.session_state.qa_system = initialize_qa_system(user_id=user_id)
+
+        # Check if initialization failed
+        if st.session_state.qa_system is None:
+            st.error("⚠️ Failed to initialize the Q&A system. Please check the logs or contact support.")
+            st.stop()
     
     if 'messages' not in st.session_state:
         st.session_state.messages = []

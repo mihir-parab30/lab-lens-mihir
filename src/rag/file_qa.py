@@ -16,6 +16,13 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 from src.rag.rag_system import RAGSystem
 from src.rag.document_processor import DocumentProcessor
 from src.rag.vector_db import VectorDatabase, CHROMADB_AVAILABLE
+
+# Import FAISS availability check
+try:
+    import faiss
+    FAISS_AVAILABLE = True
+except ImportError:
+    FAISS_AVAILABLE = False
 from src.training.gemini_inference import GeminiInference
 from src.utils.logging_config import get_logger
 from src.utils.error_handling import ErrorHandler, safe_execute
@@ -174,9 +181,40 @@ class FileQA:
         document = self.doc_processor.process_file(file_path)
         
         # Load into RAG system
-        self.rag.load_custom_documents([document])
-        
-        logger.info(f"File loaded and ready for Q&A: {document['file_name']}")
+        try:
+            self.rag.load_custom_documents([document])
+            
+            # Validate RAG system is ready
+            if not self.rag.chunks:
+                error_msg = "RAG system loaded but no chunks were created"
+                logger.error(error_msg)
+                return {
+                    'success': False,
+                    'error': error_msg,
+                    'file_name': document['file_name']
+                }
+            
+            # Check if index is built
+            has_faiss = hasattr(self.rag, 'index') and self.rag.index is not None
+            has_numpy = hasattr(self.rag, 'embeddings_normalized') and len(self.rag.embeddings_normalized) > 0
+            
+            if not has_faiss and not has_numpy:
+                error_msg = f"RAG system loaded chunks but index was not built"
+                logger.error(error_msg)
+                return {
+                    'success': False,
+                    'error': error_msg,
+                    'file_name': document['file_name']
+                }
+            
+            logger.info(f"File loaded and ready for Q&A: {document['file_name']} ({len(self.rag.chunks)} chunks)")
+        except Exception as e:
+            logger.error(f"Failed to load file into RAG: {e}", exc_info=True)
+            return {
+                'success': False,
+                'error': f'Failed to load file into RAG system: {str(e)}',
+                'file_name': document.get('file_name', 'unknown')
+            }
         
         return {
             'success': True,
@@ -204,7 +242,40 @@ class FileQA:
         document = self.doc_processor.process_text(text, source_name)
         
         # Load into RAG system
-        self.rag.load_custom_documents([document])
+        try:
+            self.rag.load_custom_documents([document])
+            
+            # Validate RAG system is ready
+            if not self.rag.chunks:
+                error_msg = "RAG system loaded but no chunks were created"
+                logger.error(error_msg)
+                return {
+                    'success': False,
+                    'error': error_msg,
+                    'source_name': source_name
+                }
+            
+            # Check if index is built
+            has_faiss = hasattr(self.rag, 'index') and self.rag.index is not None
+            has_numpy = hasattr(self.rag, 'embeddings_normalized') and len(self.rag.embeddings_normalized) > 0
+            
+            if not has_faiss and not has_numpy:
+                error_msg = f"RAG system loaded chunks but index was not built"
+                logger.error(error_msg)
+                return {
+                    'success': False,
+                    'error': error_msg,
+                    'source_name': source_name
+                }
+            
+            logger.info(f"Text loaded and validated: {source_name} ({len(self.rag.chunks)} chunks)")
+        except Exception as e:
+            logger.error(f"Failed to load text into RAG: {e}", exc_info=True)
+            return {
+                'success': False,
+                'error': f'Failed to load text into RAG system: {str(e)}',
+                'source_name': source_name
+            }
         
         # Persist to vector database if enabled
         if self.use_vector_db and self.vector_db:
@@ -275,6 +346,29 @@ class FileQA:
         # Load into RAG system
         try:
             self.rag.load_custom_documents(documents)
+            
+            # Validate that RAG system is properly initialized
+            if not self.rag.chunks:
+                error_msg = "RAG system loaded but no chunks were created"
+                logger.error(error_msg)
+                return {
+                    'success': False,
+                    'error': error_msg
+                }
+            
+            # Check if index is built
+            has_faiss = hasattr(self.rag, 'index') and self.rag.index is not None
+            has_numpy = hasattr(self.rag, 'embeddings_normalized') and len(self.rag.embeddings_normalized) > 0
+            
+            if not has_faiss and not has_numpy:
+                error_msg = f"RAG system loaded chunks but index was not built. Chunks: {len(self.rag.chunks)}, Embedding model: {self.rag.embedding_model is not None}"
+                logger.error(error_msg)
+                return {
+                    'success': False,
+                    'error': error_msg
+                }
+            
+            logger.info(f"RAG system validated: {len(self.rag.chunks)} chunks, index ready")
         except Exception as e:
             logger.error(f"Failed to load documents into RAG: {e}", exc_info=True)
             return {
@@ -346,7 +440,31 @@ class FileQA:
                 'question': question
             }
         
+        # Validate RAG system is fully initialized before retrieving
+        if not self.rag.embedding_model:
+            error_msg = "RAG system embedding model not initialized. Please reload documents."
+            logger.error(error_msg)
+            return {
+                'answer': f'System error: {error_msg}',
+                'error': error_msg,
+                'question': question
+            }
+        
+        # Check if index is built
+        has_faiss = FAISS_AVAILABLE and hasattr(self.rag, 'index') and self.rag.index is not None
+        has_numpy = hasattr(self.rag, 'embeddings_normalized') and len(self.rag.embeddings_normalized) > 0
+        
+        if not has_faiss and not has_numpy:
+            error_msg = f"RAG system index not built. Chunks: {len(self.rag.chunks)}, Embedding model: {self.rag.embedding_model is not None}, FAISS available: {FAISS_AVAILABLE}. Please reload documents."
+            logger.error(error_msg)
+            return {
+                'answer': f'System error: RAG index not initialized. Please reload documents.',
+                'error': error_msg,
+                'question': question
+            }
+        
         logger.info(f"Processing question: {question[:100]}...")
+        logger.info(f"RAG system ready: {len(self.rag.chunks)} chunks, index built: {has_faiss or has_numpy}")
         
         # Retrieve relevant chunks
         logger.info(f"Retrieving relevant information... (Total chunks available: {len(self.rag.chunks)})")
@@ -355,15 +473,24 @@ class FileQA:
         retrieved_chunks = []
         thresholds = [0.3, 0.2, 0.1, 0.0]
         
-        for threshold in thresholds:
-            retrieved_chunks = self.rag.retrieve(
-                query=question,
-                k=self.rag_k,
-                min_score=threshold
-            )
-            if retrieved_chunks:
-                logger.info(f"Retrieved {len(retrieved_chunks)} chunks with threshold {threshold}")
-                break
+        try:
+            for threshold in thresholds:
+                retrieved_chunks = self.rag.retrieve(
+                    query=question,
+                    k=self.rag_k,
+                    min_score=threshold
+                )
+                if retrieved_chunks:
+                    logger.info(f"Retrieved {len(retrieved_chunks)} chunks with threshold {threshold}")
+                    break
+        except ValueError as e:
+            error_msg = f"RAG retrieval failed: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            return {
+                'answer': f'System error: {error_msg}. Please reload documents.',
+                'error': error_msg,
+                'question': question
+            }
         
         # Determine if we have good document matches
         has_good_matches = False
