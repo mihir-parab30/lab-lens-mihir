@@ -67,7 +67,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD curl --fail http://localhost:$PORT/_stcore/health || exit 1
 
 # Run Streamlit - Cloud Run will provide PORT env var
-CMD streamlit run scripts/file_qa_web.py \
+CMD streamlit run model_deployment/web/file_qa_web.py \
     --server.port=$PORT \
     --server.address=0.0.0.0 \
     --server.headless=true

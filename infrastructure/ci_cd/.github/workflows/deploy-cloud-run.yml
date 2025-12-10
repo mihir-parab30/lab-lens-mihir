@@ -5,21 +5,12 @@ on:
     branches:
       - main
     paths:
-      - 'model_deployment/**'
-      - 'infrastructure/**'
+      - 'scripts/**'
       - 'src/**'
       - 'requirements.txt'
+      - 'Dockerfile.cloudrun'
       - '.github/workflows/deploy-cloud-run.yml'
   workflow_dispatch:  # Allow manual triggers
-    inputs:
-      environment:
-        description: 'Deployment environment'
-        required: true
-        default: 'production'
-        type: choice
-        options:
-          - production
-          - staging
 
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
@@ -30,7 +21,6 @@ jobs:
   deploy:
     name: Build and Deploy to Cloud Run
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.environment || 'production' }}
 
     permissions:
       contents: read
@@ -70,7 +60,7 @@ jobs:
           echo "🔨 Building container image..."
           gcloud builds submit \
             --tag gcr.io/$PROJECT_ID/$SERVICE_NAME \
-            --file infrastructure/docker/Dockerfile.cloudrun \
+            --file Dockerfile.cloudrun \
             --timeout=20m \
             --project $PROJECT_ID
         continue-on-error: false
@@ -84,12 +74,10 @@ jobs:
             --region $REGION \
             --allow-unauthenticated \
             --port 8501 \
-            --memory 4Gi \
-            --cpu 2 \
-            --timeout 600 \
+            --memory 2Gi \
+            --cpu 1 \
+            --timeout 300 \
             --max-instances 10 \
-            --min-instances 0 \
-            --set-env-vars HF_HOME=/root/.cache/huggingface,TRANSFORMERS_CACHE=/root/.cache/huggingface \
             --set-secrets GEMINI_API_KEY=gemini-api-key:latest,GOOGLE_API_KEY=gemini-api-key:latest \
             --project $PROJECT_ID
 
@@ -102,20 +90,5 @@ jobs:
       - name: Test Health Check
         run: |
           SERVICE_URL=$(gcloud run services describe $SERVICE_NAME --region $REGION --format='value(status.url)')
-          echo "⏳ Waiting for service to be ready..."
-          sleep 15
-          echo "🔍 Testing health endpoint..."
+          sleep 10  # Wait for service to be ready
           curl -f $SERVICE_URL/_stcore/health || exit 1
-          echo "✅ Health check passed!"
-
-      - name: Comment Deployment URL
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: '🚀 Deployment successful!\n\nService URL: ${{ steps.deploy.outputs.SERVICE_URL }}'
-            })
