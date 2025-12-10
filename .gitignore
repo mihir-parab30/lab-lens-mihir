@@ -299,3 +299,5 @@ airflow/logs/
 airflow/airflow.cfg
 .env
 .env.local
+github-actions-key.json
+*.json
