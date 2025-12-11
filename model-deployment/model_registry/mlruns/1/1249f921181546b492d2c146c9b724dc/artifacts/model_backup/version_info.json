@@ -1,0 +1,15 @@
+{
+  "version": "1.0.0",
+  "base_model": "facebook/bart-large-cnn",
+  "created_date": "2024-12-07",
+  "pipeline_components": {
+    "preprocessing": "smart_extraction",
+    "model": "bart-large-cnn",
+    "postprocessing": "rag_simplification",
+    "refinement": "gemini_api"
+  },
+  "training_config": {
+    "status": "pretrained",
+    "optimization": "smart_extraction_only"
+  }
+}
