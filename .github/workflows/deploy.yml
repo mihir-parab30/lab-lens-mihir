@@ -1,0 +1,50 @@
+name: Deploy to Cloud Run
+
+on:
+  workflow_dispatch:  # Manual trigger
+  push:
+    branches: [main]
+    paths: ['model-deployment/**']
+
+env:
+  GCP_PROJECT_ID: lablens-476121
+  GCP_REGION: us-central1
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - uses: google-github-actions/auth@v1
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+    
+    - uses: google-github-actions/setup-gcloud@v1
+    
+    - name: Deploy Backend
+      run: |
+        gcloud run deploy lab-lens-api \
+          --source model-deployment/deployment_pipeline/ \
+          --region ${{ env.GCP_REGION }} \
+          --platform managed \
+          --allow-unauthenticated \
+          --memory 4Gi \
+          --cpu 2 \
+          --timeout 300 \
+          --set-env-vars GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }},MODEL_ID=asadwaraich/bart-medical-discharge-summarizer \
+          --quiet
+    
+    - name: Get Service URL
+      run: |
+        URL=$(gcloud run services describe lab-lens-api --region ${{ env.GCP_REGION }} --format 'value(status.url)')
+        echo "### Deployed Successfully! 🚀" >> $GITHUB_STEP_SUMMARY
+        echo "**Service URL:** $URL" >> $GITHUB_STEP_SUMMARY
+        echo "**Region:** ${{ env.GCP_REGION }}" >> $GITHUB_STEP_SUMMARY
+    
+    - name: Health Check
+      run: |
+        URL=$(gcloud run services describe lab-lens-api --region ${{ env.GCP_REGION }} --format 'value(status.url)')
+        sleep 30
+        curl -f $URL/health || exit 1
+        echo "✅ Health check passed"
