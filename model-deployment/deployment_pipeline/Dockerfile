@@ -3,21 +3,30 @@ FROM python:3.10-slim
 WORKDIR /app
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y gcc g++ curl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y \
+    gcc g++ curl git \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
+# Copy requirements and install
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy the entire model directory into the container
-COPY models/bart-medical /app/models/bart-medical
 
 # Copy application code
 COPY app.py summarizer.py ./
 
-# Environment variables
+# Set environment for model caching
 ENV TRANSFORMERS_CACHE=/app/.cache
 ENV HF_HOME=/app/.cache
+ENV MODEL_ID=asadwaraich/bart-medical-discharge-summarizer
+
+# Pre-download model from Hugging Face during build
+RUN python3 -c "from transformers import AutoTokenizer, AutoModelForSeq2SeqLM; \
+    import os; \
+    model_id = os.getenv('MODEL_ID'); \
+    print(f'Downloading {model_id}...'); \
+    tokenizer = AutoTokenizer.from_pretrained(model_id); \
+    model = AutoModelForSeq2SeqLM.from_pretrained(model_id); \
+    print('✅ Model downloaded')"
 
 EXPOSE 8080
 

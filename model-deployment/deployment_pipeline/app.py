@@ -52,7 +52,7 @@ def get_summarizer():
     
     try:
         model_loading = True
-        logger.info("🔄 Loading Medical Summarizer (first request)...")
+        logger.info("📄 Loading Medical Summarizer (first request)...")
         summarizer = MedicalSummarizer(use_gpu=False)
         logger.info("✅ Model loaded successfully!")
         model_loading = False
@@ -72,6 +72,7 @@ def root():
         "endpoints": {
             "health": "/health",
             "summarize": "/summarize",
+            "info": "/info",
             "docs": "/docs"
         }
     }
@@ -101,10 +102,12 @@ def summarize(request: DischargeRequest):
         # Generate summary
         result = current_summarizer.generate_summary(request.text)
         
-        # Extract values
-        summary = result.get('final_summary', '')
-        diagnosis = result.get('extracted_data', {}).get('diagnosis', 'Unknown')
-        bart_summary = result.get('raw_bart_summary', '')
+        # FIXED: Extract values matching what summarizer.py actually returns
+        summary = result.get('summary', '')              # Changed from 'final_summary'
+        diagnosis = result.get('diagnosis', 'Unknown')    # Changed from nested 'extracted_data'
+        bart_summary = result.get('bart_summary', '')     # Changed from 'raw_bart_summary'
+        
+        logger.info(f"Summary generated: {len(summary)} chars")
         
         return SummaryResponse(
             summary=summary,

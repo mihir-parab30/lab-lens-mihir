@@ -1,4 +1,4 @@
-# Complete Model Development Requirements Status
+cd ~/lab-lens-mihir# Complete Model Development Requirements Status
 
 ## ✅ ALL REQUIREMENTS IMPLEMENTED
 
