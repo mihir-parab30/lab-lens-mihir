@@ -1,0 +1,145 @@
+name: Deploy Full Stack (Backend + Frontend)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: 
+      - 'model-deployment/**'
+
+env:
+  GCP_PROJECT_ID: lablens-476121
+  GCP_REGION: us-central1
+  BACKEND_SERVICE: lab-lens-api
+  FRONTEND_SERVICE: lab-lens-frontend
+  BACKEND_IMAGE: gcr.io/lablens-476121/lab-lens-api
+  FRONTEND_IMAGE: gcr.io/lablens-476121/lab-lens-frontend
+
+jobs:
+  deploy-backend:
+    name: Deploy Backend API
+    runs-on: ubuntu-latest
+    outputs:
+      backend_url: ${{ steps.backend-deploy.outputs.url }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v1
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+    
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v1
+    
+    - name: Configure Docker
+      run: gcloud auth configure-docker
+    
+    - name: Build Backend Docker Image
+      run: |
+        cd model-deployment/deployment_pipeline
+        docker build -t ${{ env.BACKEND_IMAGE }}:latest -t ${{ env.BACKEND_IMAGE }}:${{ github.sha }} .
+    
+    - name: Push Backend Image
+      run: |
+        docker push ${{ env.BACKEND_IMAGE }}:latest
+        docker push ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+    
+    - name: Deploy Backend to Cloud Run
+      run: |
+        gcloud run deploy ${{ env.BACKEND_SERVICE }} \
+          --image ${{ env.BACKEND_IMAGE }}:latest \
+          --region ${{ env.GCP_REGION }} \
+          --platform managed \
+          --allow-unauthenticated \
+          --memory 4Gi \
+          --cpu 2 \
+          --timeout 300 \
+          --set-env-vars GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }},MODEL_ID=asadwaraich/bart-medical-discharge-summarizer
+    
+    - name: Get Backend URL
+      id: backend-deploy
+      run: |
+        URL=$(gcloud run services describe ${{ env.BACKEND_SERVICE }} \
+          --region ${{ env.GCP_REGION }} \
+          --format 'value(status.url)')
+        echo "url=$URL" >> $GITHUB_OUTPUT
+        echo "Backend deployed to: $URL"
+    
+    - name: Test Backend Health
+      run: |
+        sleep 30
+        curl -f ${{ steps.backend-deploy.outputs.url }}/health
+        echo "✅ Backend health check passed"
+
+  deploy-frontend:
+    name: Deploy Frontend UI
+    runs-on: ubuntu-latest
+    needs: deploy-backend
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v1
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+    
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v1
+    
+    - name: Configure Docker
+      run: gcloud auth configure-docker
+    
+    - name: Update Frontend API URL
+      run: |
+        cd model-deployment/deployment_pipeline/front-end
+        # Update streamlit_app.py with backend URL
+        sed -i 's|API_URL = ".*"|API_URL = "${{ needs.deploy-backend.outputs.backend_url }}"|g' streamlit_app.py || true
+    
+    - name: Build Frontend Docker Image
+      run: |
+        cd model-deployment/deployment_pipeline/front-end
+        docker build -t ${{ env.FRONTEND_IMAGE }}:latest -t ${{ env.FRONTEND_IMAGE }}:${{ github.sha }} .
+    
+    - name: Push Frontend Image
+      run: |
+        docker push ${{ env.FRONTEND_IMAGE }}:latest
+        docker push ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+    
+    - name: Deploy Frontend to Cloud Run
+      run: |
+        gcloud run deploy ${{ env.FRONTEND_SERVICE }} \
+          --image ${{ env.FRONTEND_IMAGE }}:latest \
+          --region ${{ env.GCP_REGION }} \
+          --platform managed \
+          --allow-unauthenticated \
+          --memory 2Gi \
+          --cpu 1 \
+          --timeout 300
+    
+    - name: Get Frontend URL
+      id: frontend-deploy
+      run: |
+        URL=$(gcloud run services describe ${{ env.FRONTEND_SERVICE }} \
+          --region ${{ env.GCP_REGION }} \
+          --format 'value(status.url)')
+        echo "url=$URL" >> $GITHUB_OUTPUT
+        echo "Frontend deployed to: $URL"
+    
+    - name: Deployment Summary
+      run: |
+        echo "## 🎉 Full Stack Deployment Complete!" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Backend API" >> $GITHUB_STEP_SUMMARY
+        echo "**URL:** ${{ needs.deploy-backend.outputs.backend_url }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Frontend UI" >> $GITHUB_STEP_SUMMARY
+        echo "**URL:** ${{ steps.frontend-deploy.outputs.url }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Endpoints" >> $GITHUB_STEP_SUMMARY
+        echo "- API Docs: ${{ needs.deploy-backend.outputs.backend_url }}/docs" >> $GITHUB_STEP_SUMMARY
+        echo "- Health: ${{ needs.deploy-backend.outputs.backend_url }}/health" >> $GITHUB_STEP_SUMMARY
